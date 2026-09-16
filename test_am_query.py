@@ -1,10 +1,13 @@
 """CPU tests. These do not claim to test QLoRA execution on an L40S."""
 import copy
+import contextlib
 import datetime as dt
+import io
 import json
 import os
 from pathlib import Path
 import tempfile
+import subprocess
 import time
 import unittest
 from unittest import mock
@@ -56,7 +59,10 @@ class TestStorage(unittest.TestCase):
             base, cache = Path(d, "assigned"), Path(d, "full-cache")
             base.mkdir()
             cache.mkdir()
-            (base / "model_cache").symlink_to(cache, target_is_directory=True)
+            try:
+                (base / "model_cache").symlink_to(cache, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"OS does not permit directory symlinks: {exc}")
             cfg = m.Config(root=str(base / "smoke"))
             def usage(path):
                 return self.usage(6.47 if Path(path) == cache else 100)
@@ -72,10 +78,59 @@ class TestStorage(unittest.TestCase):
             cfg = m.Config(root=str(original / "smoke"))
             def usage(path):
                 return self.usage(6.47 if Path(path) == original else 100)
-            with mock.patch.dict(os.environ, {"SCRATCH": str(base)}, clear=True):
+            with mock.patch.dict(os.environ, {"AM_QUERY_STORAGE": str(base)}, clear=True):
                 with mock.patch.object(m.shutil, "disk_usage", side_effect=usage):
                     m.configure_storage(cfg)
             self.assertEqual(Path(cfg.root), base / "am_query_runs" / "smoke")
+
+    def test_windows_drive_listing_skips_unavailable_drives(self):
+        def usage(drive):
+            if drive == "Z:/":
+                raise OSError("Disconnected drive")
+            return mock.Mock(free=14.3 * 2**30, total=100 * 2**30)
+        with mock.patch.object(m.os, "listdrives", create=True, return_value=["C:/", "Z:/"]):
+            with mock.patch.object(m.shutil, "disk_usage", side_effect=usage):
+                self.assertEqual(m.windows_drive_report(), [
+                    {"drive": "C:/", "free_gib": 14.3, "total_gib": 100.0}])
+
+    def test_windows_diagnostics_never_calls_df(self):
+        output = io.StringIO()
+        with mock.patch.object(m.sys, "platform", "win32"):
+            with mock.patch.object(m, "storage_report", return_value={}):
+                with mock.patch.object(m, "windows_drive_report", return_value=[
+                        {"drive": "C:/", "free_gib": 14.3, "total_gib": 100.0}]):
+                    with mock.patch.object(subprocess, "run") as command:
+                        with contextlib.redirect_stdout(output):
+                            m.storage_diagnostics(m.Config())
+        command.assert_not_called()
+        self.assertIn("Windows drives", output.getvalue())
+        self.assertIn("No listed drive has 35.0", output.getvalue())
+
+    def test_kernel_without_gpu_does_not_select_storage(self):
+        with mock.patch.object(m, "kernel_diagnostics", return_value={"cuda_available": False}):
+            with mock.patch.object(m, "storage_diagnostics"):
+                with mock.patch.object(m, "configure_storage") as select:
+                    with self.assertRaisesRegex(RuntimeError, "cannot access a CUDA GPU"):
+                        m.notebook_preflight(m.Config())
+        select.assert_not_called()
+
+    def test_kernel_and_storage_checks_precede_preflight(self):
+        cfg = m.Config()
+        with mock.patch.object(m, "kernel_diagnostics", return_value={"cuda_available": True}):
+            with mock.patch.object(m, "configure_storage") as select:
+                with mock.patch.object(m, "preflight", return_value={"ok": True}) as gpu:
+                    self.assertEqual(m.notebook_preflight(cfg, "assigned"), {"ok": True})
+        select.assert_called_once_with(cfg, storage_base="assigned")
+        gpu.assert_called_once_with(cfg)
+
+    def test_native_run_lock_rejects_overlap_and_releases(self):
+        with tempfile.TemporaryDirectory() as d:
+            with m.run_lock(d):
+                with self.assertRaisesRegex(RuntimeError, "already running"):
+                    with m.run_lock(d):
+                        self.fail("Overlapping lock was allowed")
+            with m.run_lock(d):
+                self.assertTrue(Path(d, "run.lock").exists())
 
 
 class TestOracle(unittest.TestCase):

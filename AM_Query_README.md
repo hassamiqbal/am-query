@@ -25,7 +25,7 @@ run it only after selection is finished. Model downloads require institution-app
 access to Hugging Face. The default stop date is 28 September 2026 in Melbourne.
 
 No GPU job has been launched for you. No trained weights or performance result is included.
-Sixteen CPU test cases passed; L40S QLoRA execution still requires the included smoke test.
+Twenty-one CPU test cases passed; L40S QLoRA execution still requires the included smoke test.
 
 ## Fixing Cell 16: insufficient disk space
 

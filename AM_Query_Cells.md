@@ -1,6 +1,6 @@
 # AM-Query — one master GPU notebook
 
-Prepared for Hassam Iqbal · 16 September 2026 · research experiment v0.1.1
+Prepared for Hassam Iqbal · 16 September 2026 · research experiment v0.1.2
 
 **Goal:** learn to translate business questions into read-only SQLite queries, then
 test whether execution-verified self-training improves a fixed pretrained model.
@@ -45,7 +45,7 @@ not establish performance on customer databases. Repeated development selection 
 
 ## What was tested here
 
-Sixteen CPU test cases pass, including 1,200 SQL results checked against an independent Python
+Twenty-one CPU test cases pass, including 1,200 SQL results checked against an independent Python
 implementation, query permissions/resource limits, cache recovery, promotion gates and freeze
 controls. All numbered code cells were syntax-checked. The L40S training/inference path could
 not be executed in this chat environment. Cell 17 is the required GPU smoke test.
@@ -273,19 +273,31 @@ def stop_signals(budget):
 
 @contextlib.contextmanager
 def run_lock(root):
-    # Linux HPC/Jupyter: the OS releases the lock after a killed process.
-    import fcntl
+    # The OS releases this lock if the process exits or is killed.
+    import errno
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
-    with (root / "run.lock").open("a+") as handle:
+    with (root / "run.lock").open("a+b") as handle:
+        if sys.platform == "win32":
+            import msvcrt
+            # Windows supports locking a region beyond EOF: no byte needs writing.
+            def set_lock(unlock=False):
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK if unlock else msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            def set_lock(unlock=False):
+                fcntl.flock(handle, fcntl.LOCK_UN if unlock else fcntl.LOCK_EX | fcntl.LOCK_NB)
         try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise RuntimeError("This experiment is already running in another process.")
+            set_lock()
+        except OSError as exc:
+            if exc.errno in {errno.EACCES, errno.EAGAIN, errno.EDEADLK}:
+                raise RuntimeError("This experiment is already running in another process.") from exc
+            raise
         try:
             yield
         finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
+            set_lock(unlock=True)
 
 def structural_config(cfg):
     values = dataclasses.asdict(cfg)
@@ -733,7 +745,7 @@ def configure_storage(cfg, storage_base=""):
                 path = Path(value).expanduser().resolve()
                 try:
                     owned = hasattr(os, "getuid") and path.stat().st_uid == os.getuid()
-                    if path.is_dir() and owned:
+                    if path.is_dir() and (owned or name == "AM_QUERY_STORAGE"):
                         candidates.append((name, path))
                 except OSError:
                     pass
@@ -763,6 +775,35 @@ def configure_storage(cfg, storage_base=""):
         "project/scratch directory. If none has enough capacity, request more storage. "
         "No files were deleted and no download started.\n" + details)
 
+def windows_drive_report():
+    """List visible Windows drive capacity without selecting or writing to a drive."""
+    import string
+    drives = os.listdrives() if hasattr(os, "listdrives") else [f"{letter}:/" for letter in string.ascii_uppercase]
+    report = []
+    for drive in drives:
+        try:
+            usage = shutil.disk_usage(drive)
+            report.append({"drive": drive, "free_gib": round(usage.free / 2**30, 2),
+                           "total_gib": round(usage.total / 2**30, 2)})
+        except OSError:
+            # Disconnected mapped drives and empty removable-media drives are common.
+            continue
+    return report
+
+def kernel_diagnostics():
+    report = {"platform": sys.platform, "python_executable": sys.executable,
+              "cuda_available": False}
+    try:
+        import torch
+        report.update(torch=torch.__version__, cuda_available=torch.cuda.is_available())
+        if report["cuda_available"]:
+            report["gpu"] = torch.cuda.get_device_name(0)
+            report["gpu_free_gib"] = round(torch.cuda.mem_get_info(0)[0] / 2**30, 2)
+    except (ImportError, OSError, RuntimeError) as exc:
+        report["gpu_check_error"] = str(exc)
+    print(json.dumps(report, indent=2))
+    return report
+
 def storage_diagnostics(cfg):
     import subprocess
     print(json.dumps(storage_report(cfg), indent=2))
@@ -770,13 +811,41 @@ def storage_diagnostics(cfg):
         value = os.environ.get(name)
         if value:
             print(f"{name}={value}")
-    try:
-        result = subprocess.run(["df", "-hP"], capture_output=True, text=True, timeout=10)
-        print(result.stdout or result.stderr)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        print(f"Could not list mounted filesystems: {exc}")
+    if sys.platform == "win32":
+        try:
+            drives = windows_drive_report()
+            print("Windows drives (capacity only; choose a directory you are authorised to use):")
+            print(json.dumps(drives, indent=2))
+            if not any(d["free_gib"] >= cfg.min_free_gb for d in drives):
+                print(f"No listed drive has {cfg.min_free_gb:.1f} GiB free. Free known files, "
+                      "request additional storage, or use your GPU server's assigned storage.")
+        except OSError as exc:
+            print(f"Could not list Windows drives: {exc}")
+        print("Set STORAGE_BASE to an existing assigned folder, for example r'D:\\AM_Query' "
+              "only if that folder exists on a suitable authorised drive.")
+    else:
+        try:
+            result = subprocess.run(["df", "-hP"], capture_output=True, text=True, timeout=10)
+            print(result.stdout or result.stderr)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            print(f"Could not list mounted filesystems: {exc}")
     print("Filesystem free space is not a measurement of your personal/project quota.")
     print("Temporary allocation storage may disappear when the allocation ends.")
+
+def notebook_preflight(cfg, storage_base=""):
+    kernel = kernel_diagnostics()
+    if not kernel["cuda_available"]:
+        storage_diagnostics(cfg)
+        raise RuntimeError(
+            "This Jupyter kernel cannot access a CUDA GPU. Open this notebook on your "
+            "allocated L40S server/kernel, then rerun the definition cells. A notebook "
+            "on another computer cannot use that GPU just by changing a storage path.")
+    try:
+        configure_storage(cfg, storage_base=storage_base)
+    except RuntimeError:
+        storage_diagnostics(cfg)
+        raise
+    return preflight(cfg)
 
 def preflight(cfg):
     import torch
@@ -804,7 +873,8 @@ def preflight(cfg):
     result = {"torch":torch.__version__, "cuda":torch.version.cuda,
               "gpu":torch.cuda.get_device_name(0), "gpu_free_gib":round(free/2**30,2),
               "gpu_total_gib":round(total/2**30,2), "disk_free_gib":round(disk_gb,2),
-              "storage":storage, "python":sys.version.split()[0], "packages":DEPENDENCIES,
+              "storage":storage, "platform":sys.platform, "python_executable":sys.executable,
+              "python":sys.version.split()[0], "packages":DEPENDENCIES,
               "deadline":cfg.deadline, "session_hours":cfg.session_hours}
     print(json.dumps(result, indent=2))
     if free < 14*2**30:
@@ -1550,19 +1620,14 @@ data_self_check()
 
 ## Cell 16 — Check the allocated GPU and disk
 
-If your home folder has too little space, enter your assigned project/scratch directory in STORAGE_BASE. This puts run outputs and the explicit model cache on that storage. Automatic selection considers only existing user-owned directories in AM_QUERY_STORAGE, SCRATCH, WORK or PROJECT. It never selects SLURM_TMPDIR automatically. Check your storage quota and retention policy. A filesystem can report free space beyond your individual quota. Existing run files are never silently abandoned. If no suitable path exists, the cell prints storage diagnostics and stops before downloading. Do not reduce the 35 GiB check to bypass the problem.
+This first checks which kernel and GPU are actually in use. If your current drive has too little space, enter an existing assigned directory in STORAGE_BASE. Windows paths should use a raw string, for example r'D:\AM_Query' only if that folder exists on a suitable drive. This puts run outputs and the explicit model cache on that storage. Diagnostics list Windows drives using Python, or Unix mounts using df. AM_QUERY_STORAGE can explicitly name assigned storage on either OS; other allocation variables are considered only when their directories are user-owned. No temporary allocation directory is selected automatically. Check storage quota and retention policy. Existing run files are never silently abandoned. Do not reduce the 35 GiB check to bypass the problem.
 
 ```python
 # Optional: paste an EXISTING storage directory assigned to your account here.
 # Leave blank to keep a suitable current folder or inspect allocation variables.
 STORAGE_BASE = ""
 
-try:
-    configure_storage(CFG, storage_base=STORAGE_BASE)
-except RuntimeError:
-    storage_diagnostics(CFG)
-    raise
-GPU_REPORT = preflight(CFG)
+GPU_REPORT = notebook_preflight(CFG, storage_base=STORAGE_BASE)
 ```
 
 

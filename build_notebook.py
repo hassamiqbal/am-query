@@ -30,7 +30,7 @@ def code(title,body,explanation="",role="definitions"):
 
 intro = """# AM-Query — one master GPU notebook
 
-Prepared for Hassam Iqbal · 16 September 2026 · research experiment v0.1.1
+Prepared for Hassam Iqbal · 16 September 2026 · research experiment v0.1.2
 
 **Goal:** learn to translate business questions into read-only SQLite queries, then
 test whether execution-verified self-training improves a fixed pretrained model.
@@ -75,7 +75,7 @@ not establish performance on customer databases. Repeated development selection 
 
 ## What was tested here
 
-Sixteen CPU test cases pass, including 1,200 SQL results checked against an independent Python
+Twenty-one CPU test cases pass, including 1,200 SQL results checked against an independent Python
 implementation, query permissions/resource limits, cache recovery, promotion gates and freeze
 controls. All numbered code cells were syntax-checked. The L40S training/inference path could
 not be executed in this chat environment. Cell 17 is the required GPU smoke test.
@@ -177,20 +177,18 @@ storage_cell = '''# Optional: paste an EXISTING storage directory assigned to yo
 # Leave blank to keep a suitable current folder or inspect allocation variables.
 STORAGE_BASE = ""
 
-try:
-    configure_storage(CFG, storage_base=STORAGE_BASE)
-except RuntimeError:
-    storage_diagnostics(CFG)
-    raise
-GPU_REPORT = preflight(CFG)
+GPU_REPORT = notebook_preflight(CFG, storage_base=STORAGE_BASE)
 '''
 code("Check the allocated GPU and disk",storage_cell,
-     "If your home folder has too little space, enter your assigned project/scratch directory in STORAGE_BASE. This puts run outputs and the explicit model cache on that storage. Automatic selection considers only existing user-owned directories in AM_QUERY_STORAGE, SCRATCH, WORK or PROJECT. It never selects SLURM_TMPDIR automatically. Check your storage quota and retention policy. A filesystem can report free space beyond your individual quota. Existing run files are never silently abandoned. If no suitable path exists, the cell prints storage diagnostics and stops before downloading. Do not reduce the 35 GiB check to bypass the problem.","checks")
+     "This first checks which kernel and GPU are actually in use. If your current drive has too little space, enter an existing assigned directory in STORAGE_BASE. Windows paths should use a raw string, for example r'D:\\AM_Query' only if that folder exists on a suitable drive. This puts run outputs and the explicit model cache on that storage. Diagnostics list Windows drives using Python, or Unix mounts using df. AM_QUERY_STORAGE can explicitly name assigned storage on either OS; other allocation variables are considered only when their directories are user-owned. No temporary allocation directory is selected automatically. Check storage quota and retention policy. Existing run files are never silently abandoned. Do not reduce the 35 GiB check to bypass the problem.","checks")
 
 # A standalone replacement for people who already ran the original definition cells.
 storage_section = dict(sections)["GPU preflight and immutable model provenance"]
 hotfix_definitions = storage_section.split("\ndef prepare_manifest", 1)[0]
+lock_source = sections[0][1].split("@contextlib.contextmanager\ndef run_lock", 1)[1].split("\ndef structural_config", 1)[0]
+lock_source = "@contextlib.contextmanager\ndef run_lock" + lock_source
 hotfix = '''"""Run in the existing notebook with: %run -i Cell_16_Storage_Fix.py"""
+import contextlib
 import dataclasses
 import importlib.metadata as metadata
 import json
@@ -202,13 +200,8 @@ import sys
 if "CFG" not in globals() or "Budget" not in globals():
     raise RuntimeError("Run your notebook's definition cells through Cell 15 first.")
 
-''' + hotfix_definitions + '''
-try:
-    configure_storage(CFG, storage_base=globals().get("STORAGE_BASE", ""))
-except RuntimeError:
-    storage_diagnostics(CFG)
-    raise
-GPU_REPORT = preflight(CFG)
+''' + lock_source + "\n\n" + hotfix_definitions + '''
+GPU_REPORT = notebook_preflight(CFG, storage_base=globals().get("STORAGE_BASE", ""))
 '''
 (ROOT/"Cell_16_Storage_Fix.py").write_text(hotfix, encoding="utf-8")
 
@@ -398,7 +391,7 @@ run it only after selection is finished. Model downloads require institution-app
 access to Hugging Face. The default stop date is 28 September 2026 in Melbourne.
 
 No GPU job has been launched for you. No trained weights or performance result is included.
-Sixteen CPU test cases passed; L40S QLoRA execution still requires the included smoke test.
+Twenty-one CPU test cases passed; L40S QLoRA execution still requires the included smoke test.
 
 ## Fixing Cell 16: insufficient disk space
 

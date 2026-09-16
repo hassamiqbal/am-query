@@ -33,8 +33,9 @@ more. Free GPU memory and disk capacity are separate resources.
 
 In the updated notebook, set `STORAGE_BASE` to an **existing directory assigned to
 your account**. Leave it blank to retain adequate current storage or check
-user-owned allocation directories in `AM_QUERY_STORAGE`, `SCRATCH`, `WORK` and
-`PROJECT`. If none works, the cell prints diagnostics and stops before downloading.
+the explicitly configured `AM_QUERY_STORAGE` directory, or user-owned allocation
+directories in `SCRATCH`, `WORK` and `PROJECT`. If none works, the cell prints
+diagnostics and stops before downloading.
 
 For an already-running older notebook, download
 [Cell_16_Storage_Fix.py](Cell_16_Storage_Fix.py), upload it beside your notebook,
@@ -44,6 +45,17 @@ and replace Cell 16 with:
 STORAGE_BASE = ""  # Or your existing assigned project/scratch directory.
 %run -i Cell_16_Storage_Fix.py
 ```
+
+On Windows, diagnostics use Python's drive listing rather than the Unix `df`
+command. The first check prints this kernel's Python executable and visible GPU.
+If CUDA is unavailable, switch to the kernel on the allocated GPU server. The
+location of the browser does not determine where the notebook kernel runs.
+
+To use another Windows drive, first identify an existing folder assigned to you
+on a drive with enough space and quota. Set `STORAGE_BASE` using a raw string such
+as `r"D:\AM_Query"` **only if that folder actually exists and is yours to use**.
+Another folder on the same full C: drive does not provide additional disk space.
+The updated replacement also installs a Windows-compatible experiment lock.
 
 The replacement uses the `CFG` and definitions already in your kernel. It checks
 both run and cache paths, including symlinks. It does not lower the disk threshold,
@@ -99,10 +111,12 @@ python -m unittest -v test_am_query
 python validate_notebook.py
 ```
 
-Sixteen CPU tests cover 1,200 independent SQL checks, query restrictions, stop/resume,
+Twenty-one CPU tests cover 1,200 independent SQL checks, query restrictions, stop/resume,
 selection/freeze controls, low disk space, explicit and assigned storage, existing
-run preservation and a cache linked to another full filesystem. CI repeats these
-checks without downloading models. GPU loading, training, throughput and accuracy
+run preservation, a cache linked to another full filesystem, Windows drive checks,
+kernel selection and native process locking. CI repeats these checks on Linux and
+Windows without downloading models. The symlink test is skipped if OS permissions
+do not allow creating a test symlink. GPU loading, training, throughput and accuracy
 remain to be measured using the smoke test.
 
 ## Files
