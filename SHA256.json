@@ -1,0 +1,16 @@
+{
+  ".github/workflows/ci.yml": "7543aa3fe1ffe7aa07ebe13c345c48727d6df147dad91e6315fab0e1eba2c717",
+  ".gitignore": "d5ec48dbc726d285ac521644ca5257689986b98004a514f2e3396140e33f1391",
+  "AM_Query_Cells.md": "b05e8977f5be21cdb713650e1731a0bc5fa330710f69f9e2ee51905999216f39",
+  "AM_Query_Master.ipynb": "12894fc7eaea37c5248a23549d70177c9f4eb429d9ec411908c57471b261f74b",
+  "AM_Query_README.md": "0d2fb7a7f01f28d3531a483df69f214459b66dd3140e4b2d581a6392319ee0e2",
+  "Cell_16_Storage_Fix.py": "e2d6522629e4d8260e97846b27d9b56f8925cb1bf4247f8f38535dad856a82bb",
+  "README.md": "3045fe0ac0d9092d2684b040ec626fde2ac842b83971774f86f9e9fea7e52846",
+  "RIGHTS.md": "dfae2e913b6a7aa523432c9b80b9a80c12e790455cc33cf86cabaa7abef3d958",
+  "TEST_REPORT.md": "7a180e98d785d6584eecc1d09180babc90f6706dc60c5b24882fce8b73d8905c",
+  "am_query_runner.py": "3aa534d3cd51ff0e35053f21b21e3b58073853f69ec243e55dd45a50210c7c3e",
+  "build_notebook.py": "0c127b421ae4792487c296a84711e6643a74f6ecbce905aa7b182fb76cfdc04b",
+  "requirements.txt": "81974e2d2663115c37af1fdb5c627cf65fc58b49ef0154f9cfbf5f0ebd9de5b8",
+  "test_am_query.py": "971ca1bb68893298b155a4cb20dc6750364ed3bfff5e131d348eba8dfd2cc95f",
+  "validate_notebook.py": "bb01c51b9e69be0b5d78bc67c4909b7ee721fba703c10fef8e31df33947f8058"
+}

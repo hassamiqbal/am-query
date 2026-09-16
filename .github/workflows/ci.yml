@@ -1,0 +1,29 @@
+name: CPU and notebook checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cpu-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: CPU regression tests
+        run: python -m unittest -v test_am_query
+      - name: Validate clean notebook and equivalent runner
+        run: python validate_notebook.py
+      - name: Check generated files are reproducible
+        run: |
+          python build_notebook.py
+          git diff --exit-code -- AM_Query_Master.ipynb AM_Query_Cells.md AM_Query_README.md Cell_16_Storage_Fix.py
