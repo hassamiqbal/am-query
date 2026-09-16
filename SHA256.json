@@ -11,6 +11,6 @@
   "am_query_runner.py": "b62e153a07764ae4626a584f9782b73af9d8446295b0ab1b2f4811232f48ff63",
   "build_notebook.py": "9d8b530386c3302182cc8992b90291a27c85a3fbc84706b9433dff4e62f69794",
   "requirements.txt": "81974e2d2663115c37af1fdb5c627cf65fc58b49ef0154f9cfbf5f0ebd9de5b8",
-  "test_am_query.py": "8b0043ba096584bd6d970ec8dbb56a9cd3a6dc6dc8da999308898d044d7af0e6",
+  "test_am_query.py": "80c1001b5a19ad5b988c8509a8dc4650a435a5fbacc7c27b0532328871e2bc7c",
   "validate_notebook.py": "bb01c51b9e69be0b5d78bc67c4909b7ee721fba703c10fef8e31df33947f8058"
 }

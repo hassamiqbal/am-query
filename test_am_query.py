@@ -31,6 +31,7 @@ class TestStorage(unittest.TestCase):
 
     def test_explicit_storage_moves_both_paths(self):
         with tempfile.TemporaryDirectory() as d:
+            d = Path(d).resolve()  # Windows TEMP can contain an 8.3 short path.
             base = Path(d, "assigned")
             base.mkdir()
             cfg = m.Config(root=str(Path(d, "original", "smoke")))
@@ -56,6 +57,7 @@ class TestStorage(unittest.TestCase):
 
     def test_linked_cache_on_full_disk_is_checked_separately(self):
         with tempfile.TemporaryDirectory() as d:
+            d = Path(d).resolve()
             base, cache = Path(d, "assigned"), Path(d, "full-cache")
             base.mkdir()
             cache.mkdir()
@@ -72,6 +74,7 @@ class TestStorage(unittest.TestCase):
 
     def test_assigned_environment_directory_is_selected(self):
         with tempfile.TemporaryDirectory() as d:
+            d = Path(d).resolve()
             original, base = Path(d, "original"), Path(d, "assigned")
             original.mkdir()
             base.mkdir()
